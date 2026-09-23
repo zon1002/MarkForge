@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MarkForge.Editor/MarkForge.Editor.csproj" />
+  <Project Path="MarkForge.Viewer/MarkForge.Viewer.csproj" />
+</Solution>
