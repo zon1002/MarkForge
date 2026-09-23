@@ -1,6 +1,6 @@
 #define AppName      "MarkForge Markdown 工具組"
 #define AppNameEn    "MarkForge"
-#define AppVersion   "1.5.1"
+#define AppVersion   "1.6.0"
 #define AppPublisher "Fu Project"
 #define EditorExe    "MarkForge.Editor.exe"
 #define ViewerExe    "MarkForge.Viewer.exe"

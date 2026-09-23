@@ -19,6 +19,7 @@ public partial class MainForm
         BeginScrollSyncSettleWindow();
 
         _currentFilePath = null;
+        _assets.Reset(null);
         _isDirty = false;
         UpdateTitle();
         SchedulePreviewUpdate();
@@ -47,6 +48,7 @@ public partial class MainForm
             BeginScrollSyncSettleWindow();
 
             _currentFilePath = path;
+            _assets.Reset(path);
             _isDirty = false;
             UpdateTitle();
             SchedulePreviewUpdate();
@@ -67,9 +69,21 @@ public partial class MainForm
 
         try
         {
-            File.WriteAllText(_currentFilePath, _editor.Text);
+            // Copy dragged/pasted images and attachments next to the .md first; a name clash
+            // with an unrelated file there renames the copy, and the text is updated to match.
+            var (markdown, failures) = _assets.CommitForSave(_editor.Text, _currentFilePath);
+            if (markdown != _editor.Text) ReplaceTextPreservingView(markdown);
+
+            File.WriteAllText(_currentFilePath, markdown);
             _isDirty = false;
             UpdateTitle();
+            SchedulePreviewUpdate();
+
+            if (failures.Count > 0)
+            {
+                MessageBox.Show(this, "文件已儲存，但下列附加檔案無法複製到文件資料夾：\n\n" + string.Join("\n", failures),
+                    "部分檔案未複製", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             return true;
         }
         catch (IOException ex)
@@ -82,6 +96,26 @@ public partial class MainForm
             MessageBox.Show(this, $"無法儲存檔案：\n{ex.Message}", "儲存失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
+    }
+
+    /// <summary>Swaps in rewritten text (renamed attachments) as one undo step, keeping the
+    /// caret and scroll position where they were.</summary>
+    private void ReplaceTextPreservingView(string text)
+    {
+        int caret = Math.Min(_editor.CurrentPosition, text.Length);
+        int firstLine = _editor.FirstVisibleLine;
+        _editor.BeginUndoAction();
+        try
+        {
+            _editor.TargetWholeDocument();
+            _editor.ReplaceTarget(text);
+        }
+        finally
+        {
+            _editor.EndUndoAction();
+        }
+        _editor.GotoPosition(caret);
+        _editor.FirstVisibleLine = firstLine;
     }
 
     private bool SaveDocumentAs()
@@ -188,12 +222,19 @@ public partial class MainForm
         }
     }
 
+    /// <summary>Drops on the window outside the editor (toolbar, status bar): a Markdown file
+    /// opens as before; anything else is inserted at the caret like a drop on the editor.</summary>
     private void MainForm_DragDrop(object? sender, DragEventArgs e)
     {
         if (e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } paths)
         {
-            if (!ConfirmDiscardChanges()) return;
-            LoadFile(paths[0]);
+            if (paths.Length == 1 && MarkdownExtensions.Contains(Path.GetExtension(paths[0]).ToLowerInvariant()))
+            {
+                if (!ConfirmDiscardChanges()) return;
+                LoadFile(paths[0]);
+                return;
+            }
+            InsertFiles(paths, position: null);
         }
     }
 }

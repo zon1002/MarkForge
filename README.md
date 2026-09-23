@@ -1,6 +1,6 @@
 # MarkForge Markdown 工具組
 
-**版本：v1.5.1**
+**版本：v1.6.0**
 
 Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Mermaid 圖表渲染，以 .NET 8 WinForms 打造，包含 **MarkForge Editor**（編輯器）與 **MarkForge Viewer**（檢視器）兩支獨立程式。
 
@@ -16,10 +16,14 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 - **Mermaid 圖表縮放／平移**：滑鼠滾輪縮放（游標錨定，20%～1200%，不需按 Ctrl）、左鍵拖曳平移、雙擊重設
 - **格式化工具列**：粗體、斜體、刪除線、標題（H1～H6）、引用、項目清單、編號清單、工作清單（打勾／打叉／三角形／驚嘆號四種標記）、行內程式碼、程式碼區塊、連結、圖片、表格、水平分隔線
 - **顯示／隱藏窗格**：「檢視」選單可獨立切換編輯器與預覽窗格的顯示，兩者可任意組合，但不允許同時全部隱藏
-- **深色／淺色主題**：一鍵切換編輯器與預覽的配色
+- **深色／淺色主題**：預設為深色，選單、工具列、狀態列、標題列與捲軸一併套用；「檢視」選單可一鍵切換成淺色
+- **圖片拖入／貼上**：圖片檔直接拖進編輯區，或貼上截圖，自動插入圖片語法並即時預覽；**存檔時自動把圖片複製到 .md 所在資料夾**（以相對路徑引用，同名不同內容的檔案自動改名）。其他檔案拖入則成為附件連結，同樣在存檔時複製
+- **表格貼上／拖入**：從 Excel、LibreOffice Calc 複製儲存格貼上即轉成 Markdown 表格；也可直接拖入 `.xlsx`／`.xls`／`.ods`／`.csv`／`.tsv` 檔案（多工作表各自轉成表格），欄寬自動對齊、數字欄靠右
+- **Mermaid 檔案拖入**：拖入 `.mmd`／`.mermaid` 檔案自動包成 Mermaid 區塊並渲染
+- **Word／ODF 貼上轉 Markdown**：從 Word、LibreOffice Writer、Google 文件複製貼上，標題樣式與手動放大的字體都會轉成對應層級的 `#` 標題，粗體、斜體、清單、表格、連結、圖片一併轉換；需要原始文字時用「貼上為純文字」（`Ctrl+Shift+V`）
 - **字型自訂**：編輯器字型與預覽字型可分別設定
 - **預覽寬度可調整**：「檢視」選單可選擇 860px（預設）／1000px／1200px／1400px／不限制寬度，或「自訂寬度...」輸入任意數值，內容一律置中顯示；同一設定也會套用到匯出的 HTML
-- **檔案操作**：新增、開啟、儲存、另存新檔，拖放檔案至視窗即可開啟
+- **檔案操作**：新增、開啟、儲存、另存新檔，拖放 `.md` 檔案至視窗即可開啟
 - **匯出**：
   - 匯出為 HTML——完全獨立的單一 HTML 檔案（CSS／JS 全部內嵌），可脫離 MarkForge 在任何瀏覽器開啟
   - 另存為 PDF——直接用目前的預覽畫面轉存
@@ -30,7 +34,8 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 - **唯讀快速檢視**：不含編輯功能，開啟即顯示渲染結果，適合搭配外部編輯器當「第二螢幕」預覽
 - **自動重新載入**：監看檔案異動（`FileSystemWatcher`），檔案被其他程式修改後自動重新整理
 - **Mermaid 圖表縮放／平移**：與 Editor 相同的滾輪縮放、拖曳平移、雙擊重設
-- **深色／淺色主題**、**預覽字型自訂**
+- **深色／淺色主題**（預設深色）、**預覽字型自訂**
+- **相對路徑圖片**：以 .md 所在資料夾解析圖片路徑
 - **預覽寬度可調整**：工具列「寬度」下拉選單，選項與 Editor 相同（860px／1000px／1200px／1400px／不限制寬度／自訂寬度）
 - **另存為 PDF**
 - **拖放開啟檔案**、工具列可隨時「開啟」其他檔案
@@ -44,7 +49,8 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 | `Ctrl+S` | 儲存 | — |
 | `Ctrl+Shift+S` | 另存新檔 | — |
 | `Ctrl+Z` / `Ctrl+Y` | 復原／重做 | — |
-| `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | 剪下／複製／貼上 | — |
+| `Ctrl+X` / `Ctrl+C` / `Ctrl+V` | 剪下／複製／貼上（含格式、表格、圖片轉換） | — |
+| `Ctrl+Shift+V` | 貼上為純文字 | — |
 | `Ctrl+B` / `Ctrl+I` | 粗體／斜體 | — |
 | `Ctrl+K` | 插入連結 | — |
 | `F5` | — | 重新整理 |
@@ -57,6 +63,11 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 |--------|------|
 | `.md` | Markdown 文件 |
 | `.markdown` | Markdown 文件（同 `.md`） |
+| `.png` `.jpg` `.gif` `.bmp` `.webp` `.svg` … | 拖入／插入為圖片，存檔時複製到 .md 資料夾 |
+| `.xlsx` `.xlsm` `.xls` `.ods` | 拖入／插入轉成 Markdown 表格（每個工作表一個表格） |
+| `.csv` `.tsv` | 拖入／插入轉成 Markdown 表格（自動判斷分隔符號與 UTF-8／Big5 編碼） |
+| `.mmd` `.mermaid` | 拖入／插入為 Mermaid 圖表區塊 |
+| 其他檔案 | 拖入／插入為附件連結，存檔時複製到 .md 資料夾 |
 
 安裝程式會將這兩種副檔名預設關聯到 MarkForge Viewer；在檔案總管右鍵可另外選擇「以 MarkForge Editor 開啟」。
 
@@ -67,6 +78,7 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 | 類型 | 說明 |
 |------|------|
 | `.md` / `.markdown` | Editor 儲存／另存新檔的原始 Markdown 檔案 |
+| 圖片／附件 | Editor 存檔時，把拖入或貼上的圖片、附件複製到 .md 所在資料夾 |
 | `.html` | Editor「匯出為 HTML」——單一檔案、CSS／JS 全內嵌、可獨立開啟 |
 | `.pdf` | Editor／Viewer「另存為 PDF」——依目前預覽畫面轉存 |
 
@@ -78,8 +90,9 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 1. 開啟 MarkForge Editor，**「開啟...」**選擇既有 `.md` 檔案，或直接**「新增」**
 2. 左側編輯區輸入 Markdown，右側預覽窗格即時顯示渲染結果
 3. 用工具列或快捷鍵套用格式（粗體、標題、清單等）
-4. 需要單獨查看某一側時，「檢視」選單切換**「顯示編輯器」／「顯示預覽」**
-5. 完成後 `Ctrl+S` 儲存，或用「檔案」選單**「匯出為 HTML」／「另存為 PDF」**輸出
+4. 圖片、Excel／CSV、Mermaid 檔案可直接拖進編輯區；Word／Excel 的內容可直接複製貼上，自動轉成 Markdown
+5. 需要單獨查看某一側時，「檢視」選單切換**「顯示編輯器」／「顯示預覽」**
+6. 完成後 `Ctrl+S` 儲存（拖入／貼上的圖片會同時複製到 .md 所在資料夾），或用「檔案」選單**「匯出為 HTML」／「另存為 PDF」**輸出
 
 **單純檢視（Viewer）**
 1. 開啟 MarkForge Viewer，**「開啟...」**選擇 `.md` 檔案，或用檔案總管的右鍵選單直接開啟
@@ -109,7 +122,8 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 
 ```
 MarkForge.Core     Markdig 1.3.2
-MarkForge.Editor   Microsoft.Web.WebView2、Scintilla.NET 5.3.2.9、Svg 3.4.8
+MarkForge.Editor   Microsoft.Web.WebView2、Scintilla.NET 5.3.2.9、Svg 3.4.8、
+                   HtmlAgilityPack 1.13.0、ExcelDataReader 3.9.0
 MarkForge.Viewer   Microsoft.Web.WebView2
 ```
 
@@ -141,6 +155,10 @@ MarkForge_v1.1/
 │   ├── SourceSyncExtension.cs# 標題原始碼行號標記（同步捲動用）
 │   └── Assets/                # highlight.js、mermaid.js、GitHub CSS
 ├── MarkForge.Editor/          # 編輯器（WinForms + Scintilla + WebView2）
+│   ├── Import/                # 貼上／拖入轉換：HtmlToMarkdown、MarkdownTable、SpreadsheetReader
+│   ├── DocumentAssets.cs      # 拖入／貼上的圖片與附件：預覽解析、存檔時複製到 .md 資料夾
+│   ├── MainForm.Import.cs     # 貼上與拖放處理
+│   └── UiTheme.cs             # 深色／淺色外框主題（Viewer 以連結方式共用）
 ├── MarkForge.Viewer/          # 檢視器（WinForms + WebView2）
 ├── installer.iss              # Inno Setup 安裝程式腳本
 ├── versions.md                 # 版本說明

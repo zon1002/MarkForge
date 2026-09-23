@@ -16,6 +16,19 @@ public static class HtmlTemplate
     public const string AssetsHostName = "markforge.assets";
     public const string AssetsOrigin = "https://markforge.assets/";
 
+    /// <summary>
+    /// Host the preview page loads the document's own relative images from. Pages are shown
+    /// via NavigateToString (no base URL), so a relative &lt;img src&gt; would never resolve;
+    /// the page rewrites them to https://markforge.doc/&lt;path&gt; and the app serves that
+    /// host — the Editor through WebResourceRequested (so not-yet-saved dragged/pasted images
+    /// work too), the Viewer by mapping the host to the .md file's folder.
+    /// </summary>
+    public const string DocumentHostName = "markforge.doc";
+
+    /// <summary>Path prefix under <see cref="DocumentHostName"/> for images referenced by an
+    /// absolute Windows path (C:/pics/a.png or file:///C:/pics/a.png).</summary>
+    public const string AbsolutePathPrefix = "__abs__/";
+
     private static readonly string[] AssetFileNames =
     {
         "highlight.min.js",
@@ -51,6 +64,24 @@ public static class HtmlTemplate
     /// </summary>
     public static string ExportStandalone(string bodyHtml, bool darkTheme, string? fontFamily = null, double fontSize = DefaultFontSize, int previewWidthPx = DefaultPreviewWidthPx)
         => Build(bodyHtml, darkTheme, live: false, fontFamily, fontSize, inline: true, previewWidthPx: previewWidthPx);
+
+    public static string GuessContentType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".bmp" => "image/bmp",
+        ".webp" => "image/webp",
+        ".svg" => "image/svg+xml",
+        ".ico" => "image/x-icon",
+        ".avif" => "image/avif",
+        ".tif" or ".tiff" => "image/tiff",
+        ".mp4" => "video/mp4",
+        ".webm" => "video/webm",
+        ".mp3" => "audio/mpeg",
+        ".pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    };
 
     /// <summary>JSON-encodes a string for safe injection into a script call.</summary>
     public static string ToJsString(string value) => JsonSerializer.Serialize(value);
@@ -123,6 +154,8 @@ public static class HtmlTemplate
             + "<script>mermaid.initialize({ startOnLoad: false, theme: \"" + mermaidTheme + "\" });</script>\n"
             + PanZoomScript
             + ScrollSyncScript
+            // Exported HTML sits next to the .md, where plain relative paths already work.
+            + (inline ? string.Empty : DocImageScript)
             + "</head>\n"
             + "<body>\n"
             + "<article id=\"content\" class=\"markdown-body\">" + bodyHtml + "</article>\n"
@@ -153,6 +186,7 @@ public static class HtmlTemplate
           // finished drawing any diagrams in this update.
           async function updateContent(html) {
             document.getElementById('content').innerHTML = html;
+            if (window.mfResolveImages) mfResolveImages();
             highlightAll();
             await renderMermaid();
             // Re-affirming the current scroll position can still shift it (the page's
@@ -184,6 +218,29 @@ public static class HtmlTemplate
           }
           window.addEventListener('load', () => { highlightAll(); renderMermaid(); });
         </script>
+        """;
+
+    private const string DocImageScript = """
+        <script>
+          function mfResolveImages() {
+            const base = 'https://markforge.doc/';
+            document.querySelectorAll('#content img[src], #content video[src], #content source[src]').forEach(function (el) {
+              let src = el.getAttribute('src');
+              if (!src || src.indexOf(base) === 0) return;
+              let raw = src;
+              try { raw = decodeURIComponent(src); } catch (e) { }
+              if (/^file:\/\/\//i.test(raw)) raw = raw.substring(8);
+              if (/^[a-z]:[\\/]/i.test(raw)) {
+                el.setAttribute('src', base + '__abs__/' + encodeURI(raw.replace(/\\/g, '/')));
+                return;
+              }
+              if (/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) return;
+              el.setAttribute('src', base + src.replace(/^\.\//, ''));
+            });
+          }
+          document.addEventListener('DOMContentLoaded', mfResolveImages);
+        </script>
+
         """;
 
     private const string StaticHighlightScript = """

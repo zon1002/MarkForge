@@ -1,12 +1,17 @@
 using MarkForge.Core;
+using MarkForge.Ui;
 
 namespace MarkForge.Editor;
 
 public partial class MainForm
 {
-    private static readonly Color IconColor = Color.FromArgb(0x40, 0x40, 0x40);
+    private const string ImageFilter = "圖片 (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg)|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg|所有檔案 (*.*)|*.*";
+    private const string TableFilter = "表格檔案 (*.xlsx;*.xlsm;*.xls;*.ods;*.csv;*.tsv)|*.xlsx;*.xlsm;*.xls;*.ods;*.csv;*.tsv|所有檔案 (*.*)|*.*";
+    private const string MermaidFilter = "Mermaid 圖表 (*.mmd;*.mermaid)|*.mmd;*.mermaid|所有檔案 (*.*)|*.*";
 
-    private static Image SvgIcon(string name, int size = 18) => IconProvider.Get(name, size, IconColor);
+    private Color IconColor => _darkTheme ? UiTheme.DarkIcon : UiTheme.LightIcon;
+
+    private Image SvgIcon(string name, int size = 18) => IconProvider.Get(name, size, IconColor);
     private static Image SvgIcon(string name, int size, Color color) => IconProvider.Get(name, size, color);
 
     private MenuStrip BuildMenu()
@@ -30,11 +35,26 @@ public partial class MainForm
         edit.DropDownItems.Add(new ToolStripSeparator());
         edit.DropDownItems.Add(new ToolStripMenuItem("剪下(&T)", SvgIcon("scissors", 16), (_, _) => _editor.Cut()) { ShortcutKeys = Keys.Control | Keys.X });
         edit.DropDownItems.Add(new ToolStripMenuItem("複製(&C)", SvgIcon("copy", 16), (_, _) => _editor.Copy()) { ShortcutKeys = Keys.Control | Keys.C });
-        edit.DropDownItems.Add(new ToolStripMenuItem("貼上(&P)", SvgIcon("clipboard", 16), (_, _) => _editor.Paste()) { ShortcutKeys = Keys.Control | Keys.V });
+        edit.DropDownItems.Add(new ToolStripMenuItem("貼上(&P)", SvgIcon("clipboard", 16), (_, _) => SmartPaste())
+        {
+            ShortcutKeys = Keys.Control | Keys.V,
+            ToolTipText = "Word／LibreOffice 內容轉成 Markdown 標題與格式，Excel／CSV 儲存格轉成表格，截圖轉成圖片",
+        });
+        edit.DropDownItems.Add(new ToolStripMenuItem("貼上為純文字(&L)", SvgIcon("clipboard", 16), (_, _) => PastePlainText()) { ShortcutKeys = Keys.Control | Keys.Shift | Keys.V });
         edit.DropDownItems.Add(new ToolStripSeparator());
         edit.DropDownItems.Add(new ToolStripMenuItem("粗體(&B)", SvgIcon("type-bold", 16), (_, _) => ActionBold()) { ShortcutKeys = Keys.Control | Keys.B });
         edit.DropDownItems.Add(new ToolStripMenuItem("斜體(&I)", SvgIcon("type-italic", 16), (_, _) => ActionItalic()) { ShortcutKeys = Keys.Control | Keys.I });
         edit.DropDownItems.Add(new ToolStripMenuItem("插入連結(&K)", SvgIcon("link-45deg", 16), (_, _) => ActionLink()) { ShortcutKeys = Keys.Control | Keys.K });
+
+        var insert = new ToolStripMenuItem("插入(&I)");
+        insert.DropDownItems.Add(new ToolStripMenuItem("圖片檔案(&I)...", SvgIcon("image", 16),
+            (_, _) => InsertFilesFromDialog("插入圖片", ImageFilter)));
+        insert.DropDownItems.Add(new ToolStripMenuItem("表格檔案 (Excel／CSV／ODS)(&T)...", SvgIcon("table", 16),
+            (_, _) => InsertFilesFromDialog("匯入表格", TableFilter)));
+        insert.DropDownItems.Add(new ToolStripMenuItem("Mermaid 圖表檔案(&M)...", SvgIcon("code-square", 16),
+            (_, _) => InsertFilesFromDialog("插入 Mermaid 圖表", MermaidFilter)));
+        insert.DropDownItems.Add(new ToolStripMenuItem("附件檔案(&A)...", SvgIcon("link-45deg", 16),
+            (_, _) => InsertFilesFromDialog("插入附件", "所有檔案 (*.*)|*.*")));
 
         var view = new ToolStripMenuItem("檢視(&V)");
         view.DropDownItems.Add(new ToolStripMenuItem("切換深色主題(&D)", SvgIcon("moon-stars", 16), (_, _) => ToggleTheme()));
@@ -56,7 +76,7 @@ public partial class MainForm
         var help = new ToolStripMenuItem("說明(&H)");
         help.DropDownItems.Add(new ToolStripMenuItem("關於 MarkForge(&A)", SvgIcon("info-circle", 16), (_, _) => ShowAbout()));
 
-        menu.Items.AddRange(new ToolStripItem[] { file, edit, view, help });
+        menu.Items.AddRange(new ToolStripItem[] { file, edit, insert, view, help });
         return menu;
     }
 
@@ -115,8 +135,27 @@ public partial class MainForm
         tb.Items.Add(new ToolStripSeparator());
 
         AddBtn("link-45deg", "連結", "插入連結 (Ctrl+K)", (_, _) => ActionLink());
-        AddBtn("image", "圖片", "插入圖片", (_, _) => ActionImage());
-        AddBtn("table", "表格", "插入表格", (_, _) => ActionTable());
+        var imageBtn = new ToolStripSplitButton("圖片")
+        {
+            Image = SvgIcon("image"),
+            ToolTipText = "選擇圖片檔案插入（存檔時自動複製到 .md 所在資料夾）；也可直接拖入或貼上圖片",
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
+        };
+        imageBtn.ButtonClick += (_, _) => InsertFilesFromDialog("插入圖片", ImageFilter);
+        imageBtn.DropDownItems.Add(new ToolStripMenuItem("選擇圖片檔案...", null, (_, _) => InsertFilesFromDialog("插入圖片", ImageFilter)));
+        imageBtn.DropDownItems.Add(new ToolStripMenuItem("插入圖片語法範本", null, (_, _) => ActionImage()));
+        tb.Items.Add(imageBtn);
+
+        var tableBtn = new ToolStripSplitButton("表格")
+        {
+            Image = SvgIcon("table"),
+            ToolTipText = "插入表格範本；也可直接拖入 Excel／CSV 檔案，或貼上複製的儲存格",
+            DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
+        };
+        tableBtn.ButtonClick += (_, _) => ActionTable();
+        tableBtn.DropDownItems.Add(new ToolStripMenuItem("插入表格範本", null, (_, _) => ActionTable()));
+        tableBtn.DropDownItems.Add(new ToolStripMenuItem("從 Excel／CSV／ODS 檔案匯入...", null, (_, _) => InsertFilesFromDialog("匯入表格", TableFilter)));
+        tb.Items.Add(tableBtn);
         AddBtn("dash-lg", "分隔線", "插入水平分隔線", (_, _) => ActionHorizontalRule());
         tb.Items.Add(new ToolStripSeparator());
 
@@ -124,6 +163,30 @@ public partial class MainForm
         AddBtn("arrow-clockwise", "重做", "重做 (Ctrl+Y)", (_, _) => _editor.Redo());
 
         return tb;
+    }
+
+    /// <summary>Replaces Scintilla's native right-click menu, whose 貼上 would bypass SmartPaste.</summary>
+    private ContextMenuStrip BuildEditorContextMenu()
+    {
+        var menu = new ContextMenuStrip();
+        var undo = new ToolStripMenuItem("復原", SvgIcon("arrow-counterclockwise", 16), (_, _) => _editor.Undo()) { ShortcutKeyDisplayString = "Ctrl+Z" };
+        var redo = new ToolStripMenuItem("重做", SvgIcon("arrow-clockwise", 16), (_, _) => _editor.Redo()) { ShortcutKeyDisplayString = "Ctrl+Y" };
+        var cut = new ToolStripMenuItem("剪下", SvgIcon("scissors", 16), (_, _) => _editor.Cut()) { ShortcutKeyDisplayString = "Ctrl+X" };
+        var copy = new ToolStripMenuItem("複製", SvgIcon("copy", 16), (_, _) => _editor.Copy()) { ShortcutKeyDisplayString = "Ctrl+C" };
+        var paste = new ToolStripMenuItem("貼上", SvgIcon("clipboard", 16), (_, _) => SmartPaste()) { ShortcutKeyDisplayString = "Ctrl+V" };
+        var pastePlain = new ToolStripMenuItem("貼上為純文字", SvgIcon("clipboard", 16), (_, _) => PastePlainText()) { ShortcutKeyDisplayString = "Ctrl+Shift+V" };
+        var selectAll = new ToolStripMenuItem("全選", null, (_, _) => _editor.SelectAll()) { ShortcutKeyDisplayString = "Ctrl+A" };
+
+        menu.Items.AddRange(new ToolStripItem[] { undo, redo, new ToolStripSeparator(), cut, copy, paste, pastePlain, new ToolStripSeparator(), selectAll });
+        menu.Opening += (_, _) =>
+        {
+            bool hasSelection = _editor.SelectionStart != _editor.SelectionEnd;
+            undo.Enabled = _editor.CanUndo;
+            redo.Enabled = _editor.CanRedo;
+            cut.Enabled = hasSelection;
+            copy.Enabled = hasSelection;
+        };
+        return menu;
     }
 
     /// <summary>Preset preview reading-column widths (0 = unlimited) plus a "自訂寬度..." entry

@@ -1,4 +1,5 @@
 using MarkForge.Core;
+using MarkForge.Ui;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -17,7 +18,9 @@ public class ViewerForm : Form
     private FileSystemWatcher? _watcher;
 
     private string? _currentFilePath;
-    private bool _darkTheme;
+    // Dark is the default look since v1.6.0; the 深色/淺色 button still switches to light.
+    private bool _darkTheme = true;
+    private string? _mappedDocumentFolder;
     private readonly string? _initialFilePath;
 
     private string _fontFamily = HtmlTemplate.DefaultFontFamily;
@@ -34,8 +37,17 @@ public class ViewerForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Icon = TryLoadApplicationIcon();
 
-        _view = new WebView2 { Dock = DockStyle.Fill };
+        _view = new WebView2
+        {
+            Dock = DockStyle.Fill,
+            // Let drops reach the form (which opens the file) instead of WebView2 navigating
+            // to the dropped file itself.
+            AllowExternalDrop = false,
+            DefaultBackgroundColor = _darkTheme ? UiTheme.DarkBackground : Color.White,
+        };
         _toolbar = BuildToolbar();
+        ApplyChromeTheme();
+        HandleCreated += (_, _) => UiTheme.ApplyTitleBar(this, _darkTheme);
 
         _reloadDebounceTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _reloadDebounceTimer.Tick += (_, _) =>
@@ -281,6 +293,7 @@ public class ViewerForm : Form
 
         try
         {
+            MapDocumentFolder(Path.GetDirectoryName(Path.GetFullPath(_currentFilePath)));
             string markdown = File.ReadAllText(_currentFilePath);
             string html = MarkdownRenderer.RenderDocument(markdown, _darkTheme, _fontFamily, _fontSize, _widthPx);
             _view.CoreWebView2.NavigateToString(html);
@@ -289,6 +302,20 @@ public class ViewerForm : Form
         {
             // File may be mid-write by another process; the next watcher tick will retry.
         }
+    }
+
+    /// <summary>Serves the .md file's folder as https://markforge.doc/ so the page's relative
+    /// images resolve (see HtmlTemplate.DocumentHostName).</summary>
+    private void MapDocumentFolder(string? folder)
+    {
+        if (_view.CoreWebView2 is null || folder is null) return;
+        if (string.Equals(folder, _mappedDocumentFolder, StringComparison.OrdinalIgnoreCase)) return;
+
+        if (_mappedDocumentFolder is not null)
+            _view.CoreWebView2.ClearVirtualHostNameToFolderMapping(HtmlTemplate.DocumentHostName);
+        _view.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            HtmlTemplate.DocumentHostName, folder, CoreWebView2HostResourceAccessKind.Allow);
+        _mappedDocumentFolder = folder;
     }
 
     private void WatchFile(string path)
@@ -315,6 +342,15 @@ public class ViewerForm : Form
     private void ToggleTheme()
     {
         _darkTheme = !_darkTheme;
+        _view.DefaultBackgroundColor = _darkTheme ? UiTheme.DarkBackground : Color.White;
+        ApplyChromeTheme();
         Render();
+    }
+
+    private void ApplyChromeTheme()
+    {
+        UiTheme.ApplyToolStrip(_toolbar, _darkTheme);
+        BackColor = _darkTheme ? UiTheme.DarkChrome : SystemColors.Control;
+        UiTheme.ApplyTitleBar(this, _darkTheme);
     }
 }

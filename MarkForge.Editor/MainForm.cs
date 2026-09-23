@@ -1,5 +1,6 @@
 using System.Globalization;
 using MarkForge.Core;
+using MarkForge.Ui;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using ScintillaNET;
@@ -20,11 +21,16 @@ public partial class MainForm : Form
 
     private string? _currentFilePath;
     private bool _isDirty;
-    private bool _darkTheme;
+    // Dark is the default look since v1.6.0; 檢視 > 切換深色主題 still switches to light.
+    private bool _darkTheme = true;
     private bool _previewReady;
     private bool _suppressDirty;
     private bool _suppressEditorScrollSync;
     private readonly string? _initialFilePath;
+    private readonly DocumentAssets _assets = new();
+    private MenuStrip _menu = null!;
+    private ToolStrip _toolbar = null!;
+    private ContextMenuStrip _editorContextMenu = null!;
 
     private string _editorFontFamily = "Consolas";
     private float _editorFontSize = 11f;
@@ -44,7 +50,32 @@ public partial class MainForm : Form
 
         _editor = BuildEditor();
         ApplyEditorAppearance();
-        _preview = new WebView2 { Dock = DockStyle.Fill };
+        _preview = new WebView2
+        {
+            Dock = DockStyle.Fill,
+            // Files dropped on the preview used to make WebView2 navigate to them, replacing
+            // the preview page; drops belong to the editor.
+            AllowExternalDrop = false,
+            DefaultBackgroundColor = _darkTheme ? UiTheme.DarkBackground : Color.White,
+        };
+
+        // ApplyEditorAppearance() above already forced Scintilla's window into existence, so
+        // take over its drop target now; the handler covers any later handle recreation.
+        _editor.HandleCreated += (_, _) =>
+        {
+            TakeOverEditorDropTarget();
+            UiTheme.ApplyScrollbars(_editor, _darkTheme);
+        };
+        if (_editor.IsHandleCreated) TakeOverEditorDropTarget();
+        _editor.DragEnter += Editor_DragEnter;
+        _editor.DragOver += Editor_DragOver;
+        _editor.DragDrop += Editor_DragDrop;
+        _editor.DragLeave += (_, _) => _dragIsInternalMove = false;
+
+        // Scintilla's built-in right-click menu pastes plain text, bypassing SmartPaste.
+        _editor.UsePopup(false);
+        _editorContextMenu = BuildEditorContextMenu();
+        _editor.ContextMenuStrip = _editorContextMenu;
 
         _split = new SplitContainer
         {
@@ -75,14 +106,15 @@ public partial class MainForm : Form
         _statusFile = new ToolStripStatusLabel { Text = "新檔案", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
         _statusStrip.Items.AddRange(new ToolStripItem[] { _statusFile, _statusWordCount, _statusPosition });
 
-        var menu = BuildMenu();
-        var toolbar = BuildToolbar();
+        _menu = BuildMenu();
+        _toolbar = BuildToolbar();
 
-        MainMenuStrip = menu;
+        MainMenuStrip = _menu;
         Controls.Add(_split);
-        Controls.Add(toolbar);
-        Controls.Add(menu);
+        Controls.Add(_toolbar);
+        Controls.Add(_menu);
         Controls.Add(_statusStrip);
+        ApplyChromeTheme();
 
         AllowDrop = true;
         DragEnter += MainForm_DragEnter;
@@ -90,6 +122,19 @@ public partial class MainForm : Form
 
         Load += MainForm_Load;
         FormClosing += MainForm_FormClosing;
+        FormClosed += (_, _) => _assets.Dispose();
+        HandleCreated += (_, _) => UiTheme.ApplyTitleBar(this, _darkTheme);
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        // Shift+Insert is the other classic paste key; route it through SmartPaste too.
+        if (keyData == (Keys.Shift | Keys.Insert) && _editor.Focused)
+        {
+            SmartPaste();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private static Icon? TryLoadApplicationIcon()
@@ -137,6 +182,13 @@ public partial class MainForm : Form
             string assetsFolder = HtmlTemplate.EnsureAssetsExtracted("Editor");
             _preview.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 HtmlTemplate.AssetsHostName, assetsFolder, CoreWebView2HostResourceAccessKind.Allow);
+
+            // Relative images in the document are rewritten by the preview page to
+            // https://markforge.doc/<path> and served here — from the .md file's folder, or
+            // straight from wherever a dragged/pasted image still lives before it's saved.
+            _preview.CoreWebView2.AddWebResourceRequestedFilter(
+                "https://" + HtmlTemplate.DocumentHostName + "/*", CoreWebView2WebResourceContext.All);
+            _preview.CoreWebView2.WebResourceRequested += (_, e) => ServeDocumentResource(environment, e);
 
             _preview.CoreWebView2.NavigationCompleted += (_, _) =>
             {
@@ -240,12 +292,61 @@ public partial class MainForm : Form
         _scrollSettleTimer.Start();
     }
 
+    private void ServeDocumentResource(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        try
+        {
+            string path = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath.TrimStart('/'));
+            string? file = path.StartsWith(HtmlTemplate.AbsolutePathPrefix, StringComparison.Ordinal)
+                ? path[HtmlTemplate.AbsolutePathPrefix.Length..].Replace('/', '\\')
+                : _assets.Resolve(path);
+
+            if (file is not null && File.Exists(file))
+            {
+                var stream = new MemoryStream(File.ReadAllBytes(file));
+                e.Response = environment.CreateWebResourceResponse(
+                    stream, 200, "OK", "Content-Type: " + HtmlTemplate.GuessContentType(file) + "\r\nCache-Control: no-store");
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or UriFormatException or ArgumentException)
+        {
+        }
+        e.Response = environment.CreateWebResourceResponse(null, 404, "Not Found", string.Empty);
+    }
+
     private void ToggleTheme()
     {
+        var oldIconColor = IconColor;
         _darkTheme = !_darkTheme;
         _previewReady = false;
+        _preview.DefaultBackgroundColor = _darkTheme ? UiTheme.DarkBackground : Color.White;
         _preview.CoreWebView2?.NavigateToString(HtmlTemplate.Shell(_darkTheme, _previewFontFamily, _previewFontSize, _previewWidthPx));
         ApplyEditorAppearance();
+
+        IconProvider.Recolor(_menu.Items, oldIconColor, IconColor);
+        IconProvider.Recolor(_toolbar.Items, oldIconColor, IconColor);
+        IconProvider.Recolor(_editorContextMenu.Items, oldIconColor, IconColor);
+        ApplyChromeTheme();
+    }
+
+    /// <summary>Menus, toolbar, status bar, splitter, title bar and scrollbars — everything
+    /// around the two content panes.</summary>
+    private void ApplyChromeTheme()
+    {
+        UiTheme.ApplyToolStrip(_menu, _darkTheme);
+        UiTheme.ApplyToolStrip(_toolbar, _darkTheme);
+        UiTheme.ApplyToolStrip(_statusStrip, _darkTheme);
+        UiTheme.ApplyContextMenu(_editorContextMenu, _darkTheme);
+
+        Color back = _darkTheme ? UiTheme.DarkBorder : SystemColors.Control;
+        _split.BackColor = back;
+        _split.Panel1.BackColor = _darkTheme ? UiTheme.DarkBackground : SystemColors.Window;
+        _split.Panel2.BackColor = _darkTheme ? UiTheme.DarkBackground : SystemColors.Window;
+        BackColor = _darkTheme ? UiTheme.DarkChrome : SystemColors.Control;
+
+        UiTheme.ApplyTitleBar(this, _darkTheme);
+        UiTheme.ApplyScrollbars(_editor, _darkTheme);
     }
 
     private void ChoosePreviewFont()
