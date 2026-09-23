@@ -107,8 +107,19 @@ public static class HtmlTemplate
             string destPath = Path.Combine(folder, fileName);
             if (File.Exists(destPath) && new FileInfo(destPath).Length == stream.Length) continue;
 
-            using var fileStream = File.Create(destPath);
-            stream.CopyTo(fileStream);
+            // Write-then-rename: Explorer's preview pane can start several preview hosts at
+            // once (quickly arrowing through files), all extracting into the same folder.
+            string tempPath = destPath + "." + Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + ".tmp";
+            try
+            {
+                using (var fileStream = File.Create(tempPath)) stream.CopyTo(fileStream);
+                File.Move(tempPath, destPath, overwrite: true);
+            }
+            catch (IOException) when (File.Exists(destPath))
+            {
+                // Another process got there first (and may still have it open) — use theirs.
+                try { File.Delete(tempPath); } catch (IOException) { }
+            }
         }
 
         return folder;

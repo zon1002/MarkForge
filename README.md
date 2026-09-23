@@ -1,8 +1,8 @@
 # MarkForge Markdown 工具組
 
-**版本：v1.6.0**
+**版本：v1.7.0**
 
-Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Mermaid 圖表渲染，以 .NET 8 WinForms 打造，包含 **MarkForge Editor**（編輯器）與 **MarkForge Viewer**（檢視器）兩支獨立程式。
+Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Mermaid 圖表渲染，以 .NET 8 WinForms 打造，包含 **MarkForge Editor**（編輯器）與 **MarkForge Viewer**（檢視器）兩支獨立程式，並可整合進 **Windows 檔案總管的預覽窗格**。
 
 ---
 
@@ -40,6 +40,13 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 - **另存為 PDF**
 - **拖放開啟檔案**、工具列可隨時「開啟」其他檔案
 
+### 檔案總管預覽窗格
+
+- 在檔案總管選取 `.md`／`.markdown` 檔案，開啟預覽窗格（`Alt+P` 或工具列「預覽」）即可直接看到渲染結果：表格、程式碼語法上色、Mermaid 圖表、相對路徑圖片
+- 配色跟隨 Windows 的深色／淺色應用程式模式
+- 預覽內容不連線網路（遠端圖片與 iframe 一律阻擋），點擊連結以預設瀏覽器開啟
+- 安裝時勾選「在檔案總管預覽窗格顯示 Markdown」（預設勾選）即啟用
+
 ### 快捷鍵
 
 | 按鍵 | Editor | Viewer |
@@ -69,7 +76,7 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 | `.mmd` `.mermaid` | 拖入／插入為 Mermaid 圖表區塊 |
 | 其他檔案 | 拖入／插入為附件連結，存檔時複製到 .md 資料夾 |
 
-安裝程式會將這兩種副檔名預設關聯到 MarkForge Viewer；在檔案總管右鍵可另外選擇「以 MarkForge Editor 開啟」。
+安裝程式會將這兩種副檔名預設關聯到 MarkForge Viewer；在檔案總管右鍵可另外選擇「以 MarkForge Editor 開啟」，並（選擇性）註冊檔案總管預覽窗格的預覽處理常式。
 
 ---
 
@@ -116,6 +123,7 @@ Windows 桌面用的 Markdown 編輯／檢視工具組，內建即時預覽、Me
 | 工具 | 版本 |
 |------|------|
 | .NET SDK | 8.0 以上 |
+| Visual Studio Build Tools 2022 | C++ 桌面開發工作負載（v143 工具組），建置檔案總管預覽處理常式 DLL |
 | Inno Setup | 6（僅打包安裝程式需要） |
 
 ### 相依套件
@@ -125,6 +133,8 @@ MarkForge.Core     Markdig 1.3.2
 MarkForge.Editor   Microsoft.Web.WebView2、Scintilla.NET 5.3.2.9、Svg 3.4.8、
                    HtmlAgilityPack 1.13.0、ExcelDataReader 3.9.0
 MarkForge.Viewer   Microsoft.Web.WebView2
+MarkForge.PreviewHost  Microsoft.Web.WebView2
+MarkForge.PreviewHandler  （原生 C++，僅相依 Windows SDK；靜態連結 CRT，不需 VC++ 可轉散發套件）
 ```
 
 highlight.js、mermaid.js、GitHub 風格 CSS 皆以 embedded resource 形式打包進 MarkForge.Core，執行期不連外部 CDN。
@@ -139,6 +149,11 @@ dotnet build MarkForge.Viewer/MarkForge.Viewer.csproj -c Release
 # 發布（framework-dependent, win-x64）
 dotnet publish MarkForge.Editor/MarkForge.Editor.csproj -c Release -r win-x64 --self-contained false -o publish/Editor
 dotnet publish MarkForge.Viewer/MarkForge.Viewer.csproj -c Release -r win-x64 --self-contained false -o publish/Viewer
+
+# 檔案總管預覽窗格：.NET 渲染程式 + 原生 DLL 放在同一個資料夾
+dotnet publish MarkForge.PreviewHost/MarkForge.PreviewHost.csproj -c Release -r win-x64 --self-contained false -o publish/PreviewHandler
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" MarkForge.PreviewHandler/MarkForge.PreviewHandler.vcxproj -p:Configuration=Release -p:Platform=x64
+copy MarkForge.PreviewHandler\bin\x64\Release\MarkForge.PreviewHandler.dll publish\PreviewHandler\
 
 # 打包安裝程式（需先完成上面的 publish）
 iscc installer.iss
@@ -160,6 +175,8 @@ MarkForge_v1.1/
 │   ├── MainForm.Import.cs     # 貼上與拖放處理
 │   └── UiTheme.cs             # 深色／淺色外框主題（Viewer 以連結方式共用）
 ├── MarkForge.Viewer/          # 檢視器（WinForms + WebView2）
+├── MarkForge.PreviewHandler/  # 檔案總管預覽處理常式（原生 C++ COM DLL，由 prevhost.exe 載入）
+├── MarkForge.PreviewHost/     # 預覽窗格內的 .NET 渲染程式（由上面的 DLL 啟動，視窗建立在預覽窗格內）
 ├── installer.iss              # Inno Setup 安裝程式腳本
 ├── versions.md                 # 版本說明
 └── MarkForge.slnx
@@ -175,6 +192,7 @@ MarkForge_v1.1/
 | 預覽渲染 | Microsoft Edge WebView2 |
 | 圖表渲染 | Mermaid.js（離線內嵌） |
 | 語法上色（預覽） | highlight.js（離線內嵌） |
+| 檔案總管預覽 | IPreviewHandler（C++ COM）＋ 獨立 .NET 程序渲染 |
 | 安裝程式 | Inno Setup 6 |
 
 ---

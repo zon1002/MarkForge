@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Out-of-process renderer for the Explorer preview pane, launched by the native
+       MarkForge.PreviewHandler.dll (see that project). Publish it into the same folder
+       as the DLL, which looks for MarkForge.PreviewHost.exe next to itself. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>..\MarkForge.Viewer\Mv.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MarkForge.Core\MarkForge.Core.csproj" />
+  </ItemGroup>
+
+</Project>
