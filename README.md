@@ -178,7 +178,8 @@ MarkForge_v1.1/
 ├── MarkForge.PreviewHandler/  # 檔案總管預覽處理常式（原生 C++ COM DLL，由 prevhost.exe 載入）
 ├── MarkForge.PreviewHost/     # 預覽窗格內的 .NET 渲染程式（由上面的 DLL 啟動，視窗建立在預覽窗格內）
 ├── installer.iss              # Inno Setup 安裝程式腳本
-├── versions.md                 # 版本說明
+├── versions.md                 # 版本說明（完整版本歷程）
+├── docs/                      # 使用說明書、技術說明書
 └── MarkForge.slnx
 ```
 
@@ -199,4 +200,4 @@ MarkForge_v1.1/
 
 ## 版本歷程
 
-詳見 [versions.md](versions.md)。
+詳見 [versions.md](versions.md)。完整操作說明見 [docs/使用說明書.md](docs/使用說明書.md)，架構與建置細節見 [docs/技術說明書.md](docs/技術說明書.md)。
